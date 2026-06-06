@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Package identity -->
+    <PackageId>WitSeal.AgentFramework</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>WitSeal Maintainers</Authors>
+    <Company>WitSeal</Company>
+    <Product>WitSeal</Product>
+    <Description>Witnessed execution for Microsoft Agent Framework: a WitSeal-authored tool and a function-invocation middleware that route an agent's command execution through the WitSeal runtime, producing an independently verifiable execution receipt for every command the agent runs.</Description>
+    <PackageProjectUrl>https://github.com/WitSeal/witseal-dotnet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/WitSeal/witseal-dotnet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageTags>witseal;agent;ai;microsoft-agent-framework;witness;receipt;governance;audit</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Microsoft Agent Framework. Brings in Microsoft.Extensions.AI(.Abstractions),
+         which provide AIFunctionFactory, AIFunction, FunctionInvocationContext,
+         FunctionInvokingChatClient and the UseFunctionInvocation middleware hook. -->
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

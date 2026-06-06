@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- net10.0 here only because that is the runtime installed on the build host;
+         the library itself targets net8.0. The harness exercises the real adapter
+         types against the real witseal CLI with no LLM in the loop. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/WitSeal.AgentFramework/WitSeal.AgentFramework.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Microsoft.Extensions.AI provides AIFunctionArguments used to invoke the
+         authored AIFunction directly in the harness. -->
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.9.0" />
+  </ItemGroup>
+
+</Project>

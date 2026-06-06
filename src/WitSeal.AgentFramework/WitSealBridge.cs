@@ -13,8 +13,13 @@
 // core / canon / golden are untouched; this only invokes the built CLI.
 
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
+
+// Expose the internal testability seams (ParseWitnessFooter / BuildCliArguments)
+// to the test assembly only. The public API surface is unchanged.
+[assembly: InternalsVisibleTo("WitSeal.AgentFramework.Tests")]
 
 namespace WitSeal.AgentFramework;
 
@@ -135,6 +140,56 @@ public sealed class WitSealBridge
     public WitSealBridgeOptions Options => _options;
 
     /// <summary>
+    /// Parse the witness footer printed on stderr by the CLI
+    /// (<c>event=evt_… receipt=rcpt_…</c>) into the receipt and event ids. Either
+    /// component is <c>null</c> when its token is absent. This is the single source
+    /// of the footer-parsing regexes used by <see cref="RunAsync"/>.
+    /// </summary>
+    internal static (string? receiptId, string? eventId) ParseWitnessFooter(string stderr)
+    {
+        var receiptMatch = ReceiptRe.Match(stderr);
+        var eventMatch = EventRe.Match(stderr);
+        return (
+            receiptMatch.Success ? receiptMatch.Groups[1].Value : null,
+            eventMatch.Success ? eventMatch.Groups[1].Value : null);
+    }
+
+    /// <summary>
+    /// Build the exact argv passed to the Node process (everything after the Node
+    /// executable itself):
+    /// <c>CliEntry --data-dir DataDir --segment Segment exec --mode gate|witness
+    /// [--cwd Cwd] -- /bin/sh -c command</c>. This is the single source of the
+    /// command-line construction used by <see cref="RunAsync"/>.
+    /// </summary>
+    internal IReadOnlyList<string> BuildCliArguments(string command)
+    {
+        var args = new List<string>
+        {
+            _options.CliEntry,
+            "--data-dir",
+            _options.DataDir,
+            "--segment",
+            _options.Segment,
+            "exec",
+            "--mode",
+            _options.Mode == WitSealMode.Witness ? "witness" : "gate",
+        };
+
+        if (!string.IsNullOrEmpty(_options.Cwd))
+        {
+            args.Add("--cwd");
+            args.Add(_options.Cwd!);
+        }
+
+        args.Add("--");
+        args.Add("/bin/sh");
+        args.Add("-c");
+        args.Add(command);
+
+        return args;
+    }
+
+    /// <summary>
     /// Run a freeform shell command through the witseal pipeline. Mirrors the
     /// OpenHands / OpenCode adapters: the command is executed as
     /// <c>/bin/sh -c "&lt;command&gt;"</c> under the witness boundary.
@@ -153,23 +208,10 @@ public sealed class WitSealBridge
         };
 
         // node <cli> --data-dir <dir> --segment <seg> exec --mode <mode> [--cwd <cwd>] -- /bin/sh -c <command>
-        psi.ArgumentList.Add(_options.CliEntry);
-        psi.ArgumentList.Add("--data-dir");
-        psi.ArgumentList.Add(_options.DataDir);
-        psi.ArgumentList.Add("--segment");
-        psi.ArgumentList.Add(_options.Segment);
-        psi.ArgumentList.Add("exec");
-        psi.ArgumentList.Add("--mode");
-        psi.ArgumentList.Add(_options.Mode == WitSealMode.Witness ? "witness" : "gate");
-        if (!string.IsNullOrEmpty(_options.Cwd))
+        foreach (var arg in BuildCliArguments(command))
         {
-            psi.ArgumentList.Add("--cwd");
-            psi.ArgumentList.Add(_options.Cwd!);
+            psi.ArgumentList.Add(arg);
         }
-        psi.ArgumentList.Add("--");
-        psi.ArgumentList.Add("/bin/sh");
-        psi.ArgumentList.Add("-c");
-        psi.ArgumentList.Add(command);
 
         using var proc = new Process { StartInfo = psi };
 
@@ -190,16 +232,15 @@ public sealed class WitSealBridge
         await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
 
         var stderrText = stderr.ToString();
-        var receiptMatch = ReceiptRe.Match(stderrText);
-        var eventMatch = EventRe.Match(stderrText);
+        var (receiptId, eventId) = ParseWitnessFooter(stderrText);
 
         return new WitSealRunResult
         {
             ExitCode = proc.ExitCode,
             Stdout = stdout.ToString(),
             Stderr = stderrText,
-            ReceiptId = receiptMatch.Success ? receiptMatch.Groups[1].Value : null,
-            EventId = eventMatch.Success ? eventMatch.Groups[1].Value : null,
+            ReceiptId = receiptId,
+            EventId = eventId,
         };
     }
 

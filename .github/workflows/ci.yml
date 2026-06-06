@@ -1,0 +1,100 @@
+name: CI
+
+# Build + test the WitSeal.AgentFramework adapter (net8.0) and run the §9
+# public-sanitary scan on tracked files. Runs on every pull request and on
+# pushes to main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build + test (Release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Install both the .NET 10 SDK (build host toolchain; also builds net8.0)
+      # and the .NET 8 runtime so the net8.0 test assembly executes natively.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.x
+            8.0.x
+
+      - name: Restore
+        run: dotnet restore tests/WitSeal.AgentFramework.Tests/WitSeal.AgentFramework.Tests.csproj
+
+      - name: Build (Release)
+        run: dotnet build tests/WitSeal.AgentFramework.Tests/WitSeal.AgentFramework.Tests.csproj -c Release --no-restore
+
+      - name: Test (Release)
+        run: dotnet test tests/WitSeal.AgentFramework.Tests/WitSeal.AgentFramework.Tests.csproj -c Release --no-build --verbosity normal
+
+  sanitary:
+    name: "§9 public-sanitary scan"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan tracked files (no Cyrillic, no internal markers, no bin/obj)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re, subprocess, sys
+
+          tracked = subprocess.run(
+              ["git", "ls-files"],
+              capture_output=True, text=True, check=True
+          ).stdout.splitlines()
+
+          # Patterns are assembled so the full literal tokens never appear verbatim
+          # in this workflow file — otherwise the scanner would flag its own source.
+          # Range built with chr() so no literal Cyrillic appears in this file
+          # (it scans itself), matching the marker handling below.
+          cyrillic = re.compile("[" + chr(0x400) + "-" + chr(0x4ff) + "]")  # Cyrillic block U+0400-U+04FF
+          dr_marker = re.compile(r"\b" + "DR" + r"-\d{3,4}\b")
+          path_markers = (
+              "/" + "Users" + "/",
+              "~/" + "WitSeal",
+          )
+
+          failures = []
+
+          # No bin/ or obj/ build output may be tracked.
+          for path in tracked:
+              parts = path.split("/")
+              if "bin" in parts or "obj" in parts:
+                  failures.append(f"tracked build output: {path}")
+
+          # Content scan of tracked text files.
+          for path in tracked:
+              try:
+                  with open(path, "r", encoding="utf-8") as fh:
+                      text = fh.read()
+              except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
+                  # Binary or unreadable files are not subject to the text scan.
+                  continue
+
+              for n, line in enumerate(text.splitlines(), start=1):
+                  if cyrillic.search(line):
+                      failures.append(f"Cyrillic U+0400-04FF at {path}:{n}")
+                  for marker in path_markers:
+                      if marker in line:
+                          failures.append(f"absolute-path marker at {path}:{n}")
+                  if dr_marker.search(line):
+                      failures.append(f"internal decision-record marker at {path}:{n}")
+
+          if failures:
+              print("section-9 sanitary scan FAILED:")
+              for f in failures:
+                  print("  -", f)
+              sys.exit(1)
+
+          print(f"section-9 sanitary scan clean across {len(tracked)} tracked files.")
+          PY

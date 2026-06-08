@@ -1,7 +1,10 @@
 name: Publish to NuGet
 
 # Publishes WitSeal.AgentFramework to nuget.org via Trusted Publishing (OIDC) —
-# no long-lived API key stored. Triggered by a version tag (vX.Y.Z) or manually.
+# no long-lived API key stored — and then attaches full supply-chain provenance
+# to a matching GitHub release: a CycloneDX SBOM, a Sigstore (keyless) signature
+# over the .nupkg, and SLSA Build Level 3 provenance over the .nupkg digest.
+# Triggered by a version tag (vX.Y.Z) or manually.
 on:
   push:
     tags: ['v*']
@@ -9,18 +12,26 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # required: lets GitHub issue the OIDC token for Trusted Publishing
 
 jobs:
   publish:
-    name: Pack + publish (Trusted Publishing)
+    name: Pack + publish (Trusted Publishing) + SBOM
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required: lets GitHub issue the OIDC token for Trusted Publishing
+    outputs:
+      digests: ${{ steps.hash.outputs.digests }}
     steps:
       - uses: actions/checkout@v4
 
+      # Install the .NET 10 SDK (build host toolchain; also builds net8.0) and the
+      # .NET 8 runtime so the net8.0 CycloneDX global tool executes natively.
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: |
+            10.0.x
+            8.0.x
 
       - name: Pack
         run: dotnet pack src/WitSeal.AgentFramework/WitSeal.AgentFramework.csproj -c Release -o artifacts
@@ -39,3 +50,145 @@ jobs:
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
+
+      # ---- Supply-chain provenance assets (mirrors @witseal/cli on npm) ----
+
+      - name: Assemble release directory
+        run: |
+          mkdir -p release
+          # The .nupkg (and .snupkg symbol package, if produced) are the release artifacts.
+          cp artifacts/*.nupkg release/
+          if ls artifacts/*.snupkg >/dev/null 2>&1; then cp artifacts/*.snupkg release/; fi
+          ls -la release/
+
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          dotnet tool install --global CycloneDX
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          # Recursively resolve the project's dependency graph into a CycloneDX SBOM.
+          dotnet CycloneDX src/WitSeal.AgentFramework/WitSeal.AgentFramework.csproj \
+            -o release \
+            -F Json \
+            -fn "WitSeal.AgentFramework-${GITHUB_REF_NAME}.cdx.json"
+          ls -la release/
+
+      - name: Compute artifact digests
+        id: hash
+        run: |
+          cd release
+          # SHA-256 hashes over the published artifacts for SLSA provenance.
+          # Bare globs (not ./*) keep the SLSA subject names as plain filenames.
+          # shellcheck disable=SC2035
+          sha256sum *.nupkg *.cdx.json > SHA256SUMS
+          cat SHA256SUMS
+          DIGESTS=$(base64 -w0 < SHA256SUMS)
+          echo "digests=$DIGESTS" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: release/
+          retention-days: 7
+
+  sign:
+    name: Sigstore sign
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: release/
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign each artifact (keyless, OIDC, Rekor inclusion)
+        run: |
+          cd release
+          for artifact in *.nupkg *.cdx.json; do
+            echo "Signing $artifact"
+            cosign sign-blob --yes \
+              --output-signature "${artifact}.sig" \
+              --output-certificate "${artifact}.crt" \
+              "$artifact"
+          done
+          ls -la
+
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-signed
+          path: release/
+
+  provenance:
+    name: SLSA Build Level 3 provenance
+    needs: publish
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.publish.outputs.digests }}
+      upload-assets: true
+
+  publish-release:
+    name: Publish GitHub release
+    needs: [publish, sign, provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download signed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-signed
+          path: release/
+
+      - name: Resolve package version (strip the leading "v" from the release tag)
+        id: pkgver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.nupkg
+            release/*.cdx.json
+            release/*.sig
+            release/*.crt
+            release/SHA256SUMS
+          generate_release_notes: true
+          body: |
+            ## Verification
+
+            All artifacts in this release are signed with Sigstore Cosign and
+            included in the public Rekor transparency log. The SLSA Build Level 3
+            provenance (`*.intoto.jsonl`) is attached to this release by the SLSA
+            generic generator.
+
+            ```bash
+            cosign verify-blob \
+              --certificate-identity-regexp 'https://github.com/${{ github.repository }}/.+' \
+              --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+              --signature WitSeal.AgentFramework.${{ steps.pkgver.outputs.version }}.nupkg.sig \
+              --certificate WitSeal.AgentFramework.${{ steps.pkgver.outputs.version }}.nupkg.crt \
+              WitSeal.AgentFramework.${{ steps.pkgver.outputs.version }}.nupkg
+            ```
+
+            The package is also published to NuGet via Trusted Publishing (OIDC):
+
+            ```bash
+            dotnet add package WitSeal.AgentFramework --version ${{ steps.pkgver.outputs.version }}
+            ```
+
+            See [SECURITY.md](SECURITY.md) for the full verification policy.

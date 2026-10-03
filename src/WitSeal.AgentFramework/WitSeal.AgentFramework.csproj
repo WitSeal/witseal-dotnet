@@ -12,7 +12,7 @@
     <Authors>WitSeal Maintainers</Authors>
     <Company>WitSeal</Company>
     <Product>WitSeal</Product>
-    <Description>Witnessed execution for Microsoft Agent Framework: a WitSeal-authored tool and a function-invocation middleware that route an agent's command execution through the WitSeal runtime, producing an independently verifiable execution receipt for every command the agent runs.</Description>
+    <Description>Witnessed execution for Microsoft Agent Framework: a WitSeal-authored tool and a function-invocation middleware that route an agent's command execution through the WitSeal runtime, producing a verifiable execution receipt for every command routed through WitSeal.</Description>
     <PackageProjectUrl>https://github.com/WitSeal/witseal-dotnet</PackageProjectUrl>
     <RepositoryUrl>https://github.com/WitSeal/witseal-dotnet</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

@@ -18,8 +18,8 @@ namespace WitSeal.AgentFramework;
 /// <summary>
 /// Factory for the WitSeal-authored execution tool. The returned
 /// <see cref="AIFunction"/> is a drop-in replacement for an agent's "run a shell
-/// command" tool: every invocation is executed by WitSeal and yields a verifiable
-/// execution receipt instead of running on a raw, unwitnessed shell.
+/// command" tool: every invocation goes through WitSeal and is recorded as
+/// evidence instead of running on a raw, unwitnessed shell.
 /// </summary>
 public static class WitSealTool
 {
@@ -29,8 +29,8 @@ public static class WitSealTool
     /// <summary>Default tool description exposed to the model.</summary>
     public const string DefaultDescription =
         "Execute a shell command on the host through the WitSeal witnessed-execution " +
-        "runtime. Every command is mediated and recorded as an independently " +
-        "verifiable execution receipt. Returns the command output together with the " +
+        "runtime. Every command is mediated and recorded in the WitSeal evidence " +
+        "chain. Returns the command output together with the " +
         "WitSeal receipt id.";
 
     /// <summary>
@@ -76,7 +76,7 @@ public static class WitSealTool
     /// <summary>
     /// Render a <see cref="WitSealRunResult"/> into the text returned to the model.
     /// A denial is reported as such (the command did not run); a success carries a
-    /// witness footer with the receipt id so it can be independently verified.
+    /// witness footer with the receipt id so it can be checked with witseal verify.
     /// </summary>
     public static string Render(WitSealRunResult result)
     {

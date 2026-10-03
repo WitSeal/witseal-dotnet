@@ -83,11 +83,11 @@ This adapter performs **no cryptography of its own**. It shells out to the WitSe
 
 ## Threat model
 
-This adapter's job is to route an agent's command execution through the WitSeal witness boundary so each command yields an independently verifiable execution receipt. It is a thin process-launch-and-parse layer; the trust properties are provided by the WitSeal core, whose threat model lives in the core repository at `docs/threat-model.md`.
+This adapter's job is to route an agent's command execution through the WitSeal witness boundary so each command yields a verifiable execution receipt. It is a thin process-launch-and-parse layer; the trust properties are provided by the WitSeal core, whose threat model lives in the core repository at `docs/threat-model.md`.
 
 **What this adapter contributes to the boundary:**
 - Command execution routed through the WitSeal-authored tool or captured by the function-invocation middleware is executed by the WitSeal runtime and recorded as a receipt.
-- In `gate` mode, a command with no allowing policy is blocked (deny-by-default, exit code 100), does not run, and is recorded as evidence.
+- In `gate` mode, a command the policy denies — or any command when no policy pack is loaded — is blocked (deny-by-default, exit code 100), does not run, and is recorded as evidence.
 
 **What this adapter does NOT protect (see `COVERAGE.md` for the full scope statement):**
 - Microsoft Agent Framework internals (agent loop, planner, memory, orchestration) — not under the boundary.

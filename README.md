@@ -5,7 +5,7 @@
 WitSeal-authored execution tool — and/or a function-invocation middleware — so
 that the commands the agent runs are executed by the
 [WitSeal](https://github.com/WitSeal/witseal) runtime and recorded as
-independently verifiable **execution receipts**, instead of running on a raw,
+verifiable **execution receipts**, instead of running on a raw,
 unwitnessed shell.
 
 ```
@@ -30,8 +30,9 @@ around an agent's tool use, and this package implements WitSeal on both:
   returns the witnessed result — optionally short-circuiting the call with
   `context.Terminate`.
 
-Either way, **WitSeal owns that tool execution** and every command yields a full
-execution receipt that anyone can re-verify with `witseal verify`.
+Either way, **WitSeal owns that tool execution**: every command it runs yields a
+full execution receipt, a command Gate Mode blocks is recorded as a denial, and
+anyone can re-check the chain with `witseal verify`.
 
 ## The bridge
 
@@ -71,8 +72,9 @@ entry file via `WITSEAL_CLI_ENTRY` (absolute path to `dist/src/cli/index.js`).
 | `WITSEAL_MODE`      | `gate` (deny-by-default) or `witness`              | `gate`       |
 | `WITSEAL_NODE`      | Node executable                                    | `node`       |
 
-`Gate` mode is **deny-by-default**: a command with no allowing policy is blocked
-(exit code 100) and recorded as evidence; it does not run. `Witness` mode runs
+`Gate` mode is **deny-by-default**: a command the policy denies — or any command
+when no policy pack is loaded — is blocked (exit code 100) and recorded as
+evidence; it does not run. `Witness` mode runs
 the command and records a receipt regardless of policy.
 
 ## Usage — (A) the WitSeal-authored tool
@@ -129,8 +131,9 @@ argument shapes.
 
 ## Verifying
 
-Every witnessed command writes a receipt into the WitSeal data dir. Verify the
-whole chain or a single receipt with the CLI:
+Every witnessed command is recorded as a witness event in the WitSeal data dir,
+from which its receipt is derived. Verify the whole chain, or show a single
+receipt, with the CLI:
 
 ```bash
 node $WITSEAL_CLI_ENTRY --data-dir <dir> verify            # the live chain

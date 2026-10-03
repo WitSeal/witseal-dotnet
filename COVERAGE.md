@@ -18,12 +18,15 @@ honest scope statement, not a maximal claim.
   and returns the witnessed result instead of letting the call run on a raw
   shell. It can short-circuit the call with `context.Terminate`.
 
-- **Deny-by-default in Gate mode.** In `gate` mode a command with no allowing
-  policy is blocked (exit code 100), does not run, and is recorded as evidence.
+- **Deny-by-default in Gate mode.** In `gate` mode a command the policy denies —
+  or any command when no policy pack is loaded — is blocked (exit code 100), does
+  not run, and is recorded as evidence.
 
-Each in-scope execution produces a receipt that anyone can independently
-re-verify with `witseal verify` against the WitSeal data directory — no trust in
-this adapter, the host, or the model is required to check what ran.
+Each in-scope execution produces a receipt whose integrity anyone can re-check
+with `witseal verify` against the WitSeal data directory, without trusting this
+adapter or the model for that check. The records are still produced and stored
+on the host, so their truth rests on the host and on whoever can write that
+directory.
 
 ## Out of scope (NOT witnessed by this adapter)
 

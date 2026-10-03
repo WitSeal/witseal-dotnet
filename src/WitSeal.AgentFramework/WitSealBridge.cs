@@ -9,7 +9,7 @@
 //
 // captures stdout + stderr, and parses the witness footer printed on stderr
 // (`event=evt_... receipt=rcpt_...`). WitSeal owns the actual command execution
-// (L3) and emits a full, independently verifiable execution receipt. The witseal
+// (L3) and emits a full, verifiable execution receipt. The witseal
 // core / canon / golden are untouched; this only invokes the built CLI.
 
 using System.Diagnostics;
@@ -26,7 +26,7 @@ namespace WitSeal.AgentFramework;
 /// <summary>Execution mode passed to <c>witseal exec --mode</c>.</summary>
 public enum WitSealMode
 {
-    /// <summary>Deny-by-default. A command with no allowing policy is blocked and recorded as evidence; it does not run.</summary>
+    /// <summary>Deny-by-default. A command the policy denies, or any command when no policy pack is loaded, is blocked and recorded as evidence; it does not run.</summary>
     Gate,
 
     /// <summary>Observe-and-record. The command runs and a receipt is produced regardless of policy.</summary>
@@ -113,7 +113,7 @@ public sealed class WitSealRunResult
     /// <summary>The <c>evt_…</c> witness-event id parsed from the witness footer, if any.</summary>
     public string? EventId { get; init; }
 
-    /// <summary>True when the command was blocked by policy (deny-by-default) and did not run.</summary>
+    /// <summary>True when witseal exited with its denial code 100 — normally a Gate block, where the command did not run. A command that itself exits 100 is not distinguished here.</summary>
     public bool Denied => ExitCode == DeniedExitCode;
 }
 

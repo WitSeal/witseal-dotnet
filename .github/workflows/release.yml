@@ -171,8 +171,8 @@ jobs:
           body: |
             ## Verification
 
-            All artifacts in this release are signed with Sigstore Cosign and
-            included in the public Rekor transparency log. The SLSA Build Level 3
+            The package (`.nupkg`) and its SBOM (`.cdx.json`) are signed with
+            Sigstore Cosign and included in the public Rekor transparency log. The SLSA Build Level 3
             provenance (`*.intoto.jsonl`) is attached to this release by the SLSA
             generic generator.
 

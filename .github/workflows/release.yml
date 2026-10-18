@@ -30,8 +30,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
-            10.0.x
-            8.0.x
+            10.0.402
+            8.0.426
 
       - name: Pack
         run: dotnet pack src/WitSeal.AgentFramework/WitSeal.AgentFramework.csproj -c Release -o artifacts

@@ -14,7 +14,7 @@ permissions:
 jobs:
   build-test:
     name: Build + test (Release)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -24,11 +24,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
-            10.0.x
-            8.0.x
+            10.0.402
+            8.0.426
 
       - name: Restore
-        run: dotnet restore tests/WitSeal.AgentFramework.Tests/WitSeal.AgentFramework.Tests.csproj
+        run: dotnet restore tests/WitSeal.AgentFramework.Tests/WitSeal.AgentFramework.Tests.csproj --locked-mode
 
       - name: Build (Release)
         run: dotnet build tests/WitSeal.AgentFramework.Tests/WitSeal.AgentFramework.Tests.csproj -c Release --no-restore
@@ -38,7 +38,7 @@ jobs:
 
   sanitary:
     name: "§9 public-sanitary scan"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -98,3 +98,48 @@ jobs:
 
           print(f"section-9 sanitary scan clean across {len(tracked)} tracked files.")
           PY
+
+  harness:
+    name: No-LLM bridge (Linux, pinned CLI)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: adapter
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: WitSeal/witseal
+          ref: c80600f91c63d1dcee72d510f035133a2cf2f85e
+          path: cli
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.19.0"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.402"
+      - name: Build the pinned CLI
+        working-directory: cli
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Restore and build the source harness
+        working-directory: adapter
+        run: |
+          dotnet restore samples/WitSeal.AgentFramework.Harness/WitSeal.AgentFramework.Harness.csproj --locked-mode
+          dotnet build samples/WitSeal.AgentFramework.Harness/WitSeal.AgentFramework.Harness.csproj -c Release --no-restore
+      - name: Exercise A/B/C and a separate no-policy Gate refusal
+        working-directory: adapter
+        shell: bash
+        run: |
+          WITSEAL_CLI_ENTRY="$GITHUB_WORKSPACE/cli/dist/src/cli/index.js" \
+          WITSEAL_DATA_DIR="$(mktemp -d)" WITSEAL_MODE=witness \
+          dotnet samples/WitSeal.AgentFramework.Harness/bin/Release/net10.0/WitSeal.AgentFramework.Harness.dll
+      - name: Check that a missing A or B receipt fails the harness
+        working-directory: adapter
+        run: |
+          python3 scripts/test_harness_failures.py \
+            --harness samples/WitSeal.AgentFramework.Harness/bin/Release/net10.0/WitSeal.AgentFramework.Harness.dll \
+            --cli "$GITHUB_WORKSPACE/cli/dist/src/cli/index.js"

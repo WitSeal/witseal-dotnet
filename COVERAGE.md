@@ -22,11 +22,17 @@ honest scope statement, not a maximal claim.
   or any command when no policy pack is loaded — is blocked (exit code 100), does
   not run, and is recorded as evidence.
 
-Each in-scope execution produces a receipt whose integrity anyone can re-check
+When the runtime successfully records an in-scope result, its receipt's integrity can be re-checked
 with `witseal verify` against the WitSeal data directory, without trusting this
 adapter or the model for that check. The records are still produced and stored
 on the host, so their truth rests on the host and on whoever can write that
 directory.
+
+Infrastructure or storage failure can prevent a receipt from being recorded or
+returned. Missing identifiers do not prove absence of execution. The legacy
+`Denied` property reports only CLI exit code 100, which may also be returned by
+an executed command; the tool renderer reports that ambiguity without asserting
+non-execution. These source corrections are not present in NuGet 0.1.0.
 
 ## Out of scope (NOT witnessed by this adapter)
 
@@ -61,3 +67,23 @@ remain outside it.
 This adapter invokes the unchanged WitSeal CLI as a child process. It does not
 modify the WitSeal core, its wire format, or its canonical artifacts; the receipts
 it produces are ordinary WitSeal receipts.
+
+## What the no-LLM harness checks
+
+For the [documented version combination](README.md#checked-combination-2026-10-18),
+the harness requires receipts separately for the authored tool, middleware, and
+direct bridge. It matches their identifiers and commands to exported evidence,
+requires successful execution results, and asks the pinned CLI to verify the
+chain and exported package. Withholding the receipt token from either A or B
+must prevent overall success.
+
+The separate no-policy Gate case checks exit 100, absence of the attempted
+file side effect, and an exported refusal without an execution result. It does
+not infer non-execution from exit code 100 alone. In the pinned CLI's no-policy
+diagnostic, the event id is not in the normal `event=...` footer format, so the
+bridge's `EventId` can be null; the harness examines the exported refusal.
+
+These checks exercise one Linux combination and deliberately scoped commands.
+They do not exercise a model, agent planning, or the influence of tool-description
+wording on model behavior. CLI verification checks the supplied evidence's
+integrity; it does not independently establish the truthfulness of the host.

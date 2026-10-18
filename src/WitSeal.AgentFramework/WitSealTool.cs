@@ -18,8 +18,8 @@ namespace WitSeal.AgentFramework;
 /// <summary>
 /// Factory for the WitSeal-authored execution tool. The returned
 /// <see cref="AIFunction"/> is a drop-in replacement for an agent's "run a shell
-/// command" tool: every invocation is executed by WitSeal and yields a verifiable
-/// execution receipt instead of running on a raw, unwitnessed shell.
+/// command" tool: invocation is routed through WitSeal, and available evidence
+/// identifiers are returned. Infrastructure failure can prevent recording.
 /// </summary>
 public static class WitSealTool
 {
@@ -29,9 +29,9 @@ public static class WitSealTool
     /// <summary>Default tool description exposed to the model.</summary>
     public const string DefaultDescription =
         "Execute a shell command on the host through the WitSeal witnessed-execution " +
-        "runtime. Every command is mediated and recorded as an independently " +
-        "verifiable execution receipt. Returns the command output together with the " +
-        "WitSeal receipt id.";
+        "runtime. Gate mode can refuse execution. Returns command output and " +
+        "the evidence identifiers reported by the CLI, when available. " +
+        "Infrastructure failure can prevent evidence recording.";
 
     /// <summary>
     /// Create the WitSeal-authored tool over an existing <paramref name="bridge"/>.
@@ -75,18 +75,13 @@ public static class WitSealTool
 
     /// <summary>
     /// Render a <see cref="WitSealRunResult"/> into the text returned to the model.
-    /// A denial is reported as such (the command did not run); a success carries a
-    /// witness footer with the receipt id so it can be independently verified.
+    /// Exit code 100 alone does not distinguish a Gate refusal from a command
+    /// that executed and returned 100. Report available identifiers without
+    /// claiming that absent evidence was recorded or that verification ran.
     /// </summary>
     public static string Render(WitSealRunResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
-
-        if (result.Denied)
-        {
-            return "[witseal] command DENIED by policy (deny-by-default); it did not run. " +
-                   $"Recorded as evidence (event {result.EventId}).";
-        }
 
         var sb = new StringBuilder();
         sb.Append(result.Stdout);
@@ -94,10 +89,16 @@ public static class WitSealTool
         {
             sb.Append('\n');
         }
+        if (result.Denied)
+        {
+            sb.AppendLine("[witseal] exit 100: this may be a Gate refusal or the executed command's exit code. Inspect the evidence to distinguish them.");
+        }
         sb.Append("[witseal: receipt=").Append(result.ReceiptId ?? "(none)")
           .Append(" event=").Append(result.EventId ?? "(none)")
           .Append(" exit=").Append(result.ExitCode)
-          .Append(" — full execution receipt recorded; verify with `witseal verify`]");
+          .Append(result.ReceiptId is null
+              ? " — receipt ID unavailable; evidence status not established]"
+              : " — receipt ID reported by CLI; inspect and verify evidence with `witseal verify`]");
         return sb.ToString();
     }
 }
